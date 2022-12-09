@@ -31,4 +31,3 @@ def get_reward_shaping_func(
         return percentile * (new_max - new_min) + new_min
 
     return _shaping_func
-

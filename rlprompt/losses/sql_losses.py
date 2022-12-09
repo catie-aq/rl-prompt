@@ -157,9 +157,6 @@ def soft_q_loss_with_sparse_rewards_2(
         shape=actions.shape)
     V = logits.logsumexp(dim=-1)
     A = Q - V
-    # print(logits.shape)
-    # print(V)
-    print(Q)
 
     # Target outputs
     Q_ = torch.zeros_like(Q)
@@ -172,10 +169,7 @@ def soft_q_loss_with_sparse_rewards_2(
     terminal_V_ = V_[
         torch.arange(sequence_length.shape[0]),
         sequence_length - 1]
-#     print(Q_)
-#     print(sequence_length)
-#     print(torch.arange(sequence_length.shape[0]))
-#     print(rewards)
+
     Q_[
         torch.arange(sequence_length.shape[0]),
         sequence_length - 1] = rewards

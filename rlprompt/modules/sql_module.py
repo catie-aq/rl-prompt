@@ -47,7 +47,7 @@ class SQLModule(BaseModule):
         # for p1, p2 in zip(self._model.parameters(), self._target_model.parameters()):
         #     if p1.data.ne(p2.data).sum() > 0:
         #         print(False)
-        #     print(True) 
+        #     print(True)
         self._reward = reward
 
         self._sql_loss_impl = sql_loss_impl
@@ -112,17 +112,16 @@ class SQLModule(BaseModule):
         mode: ForwardMode,
         batch: Dict[str, Any]
     ) -> Tuple[torch.Tensor, Dict]:
-        if mode != ForwardMode.SQL_ON and mode != ForwardMode.INFER:
-            # TODO: Enable training modes other than on-policy
-            raise NotImplementedError('Only on-policy sampling and greedy '
-                                      'inference is supported now')
 
         if mode == ForwardMode.SQL_ON:
             (logits, logits_, output_tokens, output_ids, sequence_lengths) = \
                 self._decode_sampling(batch=batch)
+        elif mode == ForwardMode.SQL_OFF_GT:
+            (logits, logits_, output_tokens, output_ids, sequence_lengths) = \
+                self._decode_teacher_forcing(batch=batch)
 
         raw_rewards, rewards_log = \
-            self.compute_rewards(batch=batch, 
+            self.compute_rewards(batch=batch,
                                   output_tokens=output_tokens,
                                   mode="train")
         shaped_rewards = self._reward_shaping_func(raw_rewards)
@@ -158,13 +157,14 @@ class SQLModule(BaseModule):
         to_tensor: bool = True,
         mode: str = "infer"
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+
         rewards_tensor, rewards_log = self._reward(
             **batch,
             output_tokens=output_tokens,
             to_tensor=to_tensor,
             mode=mode)
 
-        rewards_tensor = rewards_tensor.to(device)            
+        rewards_tensor = rewards_tensor.to(device)
         return rewards_tensor, rewards_log
 
     def infer(
@@ -177,6 +177,24 @@ class SQLModule(BaseModule):
                                     top_p=self._top_p,
                                     num_beams=self._num_beams,
                                     infer=True)
+
+    def _decode_teacher_forcing(self,
+        batch: Dict[str, Any],
+    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[str]],
+               torch.LongTensor, torch.LongTensor]:
+
+        outputs = self._model.teacher_forcing(**batch, use_targets=True)
+
+        batch_ = {k: v for k, v in batch.items()}
+        batch_.update(outputs)
+
+        outputs_ = self._target_model.teacher_forcing(**batch_, use_targets=True)
+
+        return (outputs['sample_logits'].contiguous(),
+                outputs_['sample_logits'].contiguous(),
+                batch['target_texts'],
+                outputs['sample_ids'].contiguous(),
+                outputs['sample_lengths'].contiguous())
 
     def _decode_sampling(
         self,
